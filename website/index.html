@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#fff">
 <meta name="description" content="A nearly live map of Meshtastic nodes seen by the official Meshtastic MQTT server">
-<title>MeshMap - Meshtastic Node Map</title>
+<title>Hessenmap - Based on MeshMap</title>
 <link rel="preload" href="/nodes.json" as="fetch" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900">
 <link rel="stylesheet" href="https://unpkg.com/font-awesome@4.7.0/css/font-awesome.min.css">
@@ -127,7 +127,7 @@
 </script>
 <div id="header">
   <div>
-    <a href="https://meshmap.net/" title="A nearly live map of Meshtastic nodes seen by the official Meshtastic MQTT server">MeshMap</a>
+    <a href="https://meshmap.net/" title="Hessenmap - Based on MeshMap">Hessenmap - Based on MeshMap</a>
   </div>
   <div>
     <a href="#" onclick="toggleDark();return false;" title="Toggle dark mode">
@@ -230,7 +230,7 @@
   // updates attribution with given count of nodes
   const updateNodeCount = count => attribution.setPrefix(`
     ${count.toLocaleString()} nodes from
-    <a href="https://meshtastic.org/docs/software/integrations/mqtt/#public-mqtt-server">Meshtastic MQTT</a>
+    <a href="https://mqtt.meshhessen.de">MeshHessen MQTT</a>
   `)
   // track and store map position
   map.on('moveend', () => {
