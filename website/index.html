@@ -323,7 +323,8 @@
         })
       }
       const lastSeen = Math.max(...Object.values(seenBy))
-      const opacity = 1.0 - (Date.now() / 1000 - lastSeen) / 86400
+      const age = Date.now() / 1000 - lastSeen
+      const opacity = age < 79200 ? 1.0 : Math.max(0, 1.0 - (age - 79200) / 7200)
       const tooltipContent = `${html(longName)} (${html(shortName)}) ${since(lastSeen)}`
       const popupContent = `
         <div class="title">${html(longName)} (${html(shortName)})</div>
