@@ -188,6 +188,21 @@
     return s
   }
   const since = t => `${duration(Date.now() / 1000 - t)} ago`
+  const antennaSectorStyle = {color: '#2563eb', weight: 1.5, opacity: 0.6, fillColor: '#2563eb', fillOpacity: 0.12}
+  const destPoint = (lat, lng, bearing, distM) => {
+    const R = 6371000, d = distM / R
+    const φ1 = lat * Math.PI / 180, λ1 = lng * Math.PI / 180, θ = bearing * Math.PI / 180
+    const φ2 = Math.asin(Math.sin(φ1)*Math.cos(d) + Math.cos(φ1)*Math.sin(d)*Math.cos(θ))
+    const λ2 = λ1 + Math.atan2(Math.sin(θ)*Math.sin(d)*Math.cos(φ1), Math.cos(d)-Math.sin(φ1)*Math.sin(φ2))
+    return [φ2*180/Math.PI, ((λ2*180/Math.PI)+540)%360-180]
+  }
+  const orientToDeg = o => typeof o === 'number' ? o :
+    ({n:0,nne:22.5,ne:45,ene:67.5,e:90,ese:112.5,se:135,sse:157.5,s:180,ssw:202.5,sw:225,wsw:247.5,w:270,wnw:292.5,nw:315,nnw:337.5})[String(o).toLowerCase()] ?? 0
+  const buildSector = (lat, lng, bearing, halfAngle, radiusM) => {
+    const pts = [[lat, lng]]
+    for (let i = 0; i <= 36; i++) pts.push(destPoint(lat, lng, bearing - halfAngle + halfAngle*2*i/36, radiusM))
+    return pts
+  }
   // init map
   const map = L.map('map', {
     center: window.localStorage.getItem('center')?.split(',') ?? [25, 0],
@@ -201,6 +216,8 @@
     attribution: 'Map tiles from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 17,
   }).addTo(map)
+  // add antenna sector layer (below markers)
+  const antennasLayer = L.layerGroup().addTo(map)
   // add marker group
   const markers = L.markerClusterGroup({
     maxClusterRadius: zoom => zoom < 3 ? 40 : 30,
@@ -254,7 +271,7 @@
   // generates html for a node link
   const nodeLink = (num, label) => `<a href="#${num}" onclick="showNode(${num});return false;">${html(label)}</a>`
   // updates node map markers
-  const updateNodes = data => {
+  const updateNodes = async data => {
     const popupWasOpen = lastActiveNode && markersByNode[lastActiveNode]?.isPopupOpen()
     const detailsLayerWasPopulated = detailsLayer.getLayers().length > 0
     markersByNode = {}
@@ -427,6 +444,32 @@
     })
     markers.addLayers(Object.values(markersByNode))
     reactivate()
+    // fetch and draw antenna sectors for active gateways
+    antennasLayer.clearLayers()
+    await Promise.allSettled(
+      Object.entries(data)
+        .filter(([, n]) => n.lastMapReport)
+        .map(async ([nodeNum, node]) => {
+          const id = `!${Number(nodeNum).toString(16)}`
+          try {
+            const r = await fetch(`https://mqtt-request.meshhessen.de/api/nodes/${id}/antenna`)
+            if (!r.ok) return
+            const {antenna} = await r.json()
+            if (!antenna?.beam_angle || !antenna?.orientation) return
+            const lat = node.latitude / 10000000, lng = node.longitude / 10000000
+            const bearing = orientToDeg(antenna.orientation)
+            const shape = antenna.beam_angle >= 360
+              ? L.circle([lat, lng], {radius: 30000, ...antennaSectorStyle})
+              : L.polygon(buildSector(lat, lng, bearing, antenna.beam_angle / 2, 30000), antennaSectorStyle)
+            const tip = `<b>${html(antenna.type ?? 'Antenne')}</b><br>` +
+              `Ausrichtung: ${html(String(antenna.orientation))}, ${antenna.beam_angle}° Öffnungswinkel` +
+              (antenna.gain ? `<br>Gewinn: ${html(antenna.gain)}` : '') +
+              (antenna.height_m ? `<br>Höhe: ${antenna.height_m} m` : '') +
+              (antenna.placement ? `<br>Montage: ${html(antenna.placement)}` : '')
+            shape.bindTooltip(tip, {opacity: 0.95}).addTo(antennasLayer)
+          } catch {}
+        })
+    )
   }
   // fetches node data, updates map, repeats
   const drawMap = async () => {
