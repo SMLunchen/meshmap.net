@@ -120,6 +120,19 @@
     color: #fff;
     font-size: 13px;
   }
+  .antenna-toggle {
+    background: white;
+    padding: 5px 10px;
+    font-family: "Inter", sans-serif;
+    font-size: 13px;
+  }
+  .antenna-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+  }
 </style>
 <script>
   const toggleDark = () => {
@@ -188,7 +201,45 @@
     return s
   }
   const since = t => `${duration(Date.now() / 1000 - t)} ago`
-  const antennaSectorStyle = {color: '#2563eb', weight: 1.5, opacity: 0.6, fillColor: '#2563eb', fillOpacity: 0.12}
+  let antennaDataByNode = {}
+  let showAllAntennas = false
+  let currentData = {}
+  const getAntennaStyle = antenna => {
+    const color = antenna.placement === 'indoor' ? '#dc2626' : '#2563eb'
+    return {color, weight: 1.5, opacity: 0.6, fillColor: color, fillOpacity: 0.12}
+  }
+  const getAntennaRadius = antenna => {
+    if (antenna.placement === 'indoor') return 5000
+    const g = parseFloat(antenna.gain)
+    return isNaN(g) ? 30000 : Math.min(30000, Math.max(5000, 5000 + g * 2500))
+  }
+  const createAntennaShape = (node, antenna) => {
+    const lat = node.latitude / 10000000, lng = node.longitude / 10000000
+    const style = getAntennaStyle(antenna)
+    const radius = getAntennaRadius(antenna)
+    const isDirectional = antenna.beam_angle > 0 && antenna.beam_angle < 360 && antenna.orientation != null
+    const shape = isDirectional
+      ? L.polygon(buildSector(lat, lng, orientToDeg(antenna.orientation), antenna.beam_angle / 2, radius), style)
+      : L.circle([lat, lng], {radius, ...style})
+    const tip = [
+      `<b>${html(antenna.type ?? 'Antenne')}</b>`,
+      isDirectional ? `Ausrichtung: ${html(String(antenna.orientation))}, ${antenna.beam_angle}° Öffnungswinkel` : 'Rundstrahler (360°)',
+      antenna.gain ? `Gewinn: ${parseFloat(antenna.gain).toFixed(1)} dBi` : '',
+      antenna.height_m ? `Höhe: ${antenna.height_m} m` : '',
+      antenna.placement ? `Montage: ${html(antenna.placement)}` : '',
+    ].filter(Boolean).join('<br>')
+    return shape.bindTooltip(tip, {opacity: 0.95})
+  }
+  const redrawAntennas = () => {
+    antennasLayer.clearLayers()
+    if (showAllAntennas) {
+      Object.entries(antennaDataByNode).forEach(([nodeNum, antenna]) => {
+        if (currentData[nodeNum]) createAntennaShape(currentData[nodeNum], antenna).addTo(antennasLayer)
+      })
+    } else if (lastActiveNode && antennaDataByNode[lastActiveNode] && currentData[lastActiveNode]) {
+      createAntennaShape(currentData[lastActiveNode], antennaDataByNode[lastActiveNode]).addTo(antennasLayer)
+    }
+  }
   const destPoint = (lat, lng, bearing, distM) => {
     const R = 6371000, d = distM / R
     const φ1 = lat * Math.PI / 180, λ1 = lng * Math.PI / 180, θ = bearing * Math.PI / 180
@@ -224,7 +275,10 @@
   }).addTo(map)
   // add node details layer (precision rectangle, relation lines)
   const detailsLayer = L.layerGroup().addTo(map)
-  map.on('click', () => detailsLayer.clearLayers())
+  map.on('click', () => {
+    detailsLayer.clearLayers()
+    if (!showAllAntennas) antennasLayer.clearLayers()
+  })
   // add search control
   map.addControl(new L.Control.Search({
     layer: markers,
@@ -253,6 +307,19 @@
       },
     ],
   }).addTo(map)
+  // add antenna toggle control
+  const antennaToggleControl = L.control({position: 'bottomleft'})
+  antennaToggleControl.onAdd = () => {
+    const div = L.DomUtil.create('div', 'antenna-toggle leaflet-bar')
+    div.innerHTML = '<label><input type="checkbox" id="antenna-toggle"> Antennen anzeigen</label>'
+    L.DomEvent.disableClickPropagation(div)
+    div.querySelector('input').addEventListener('change', e => {
+      showAllAntennas = e.target.checked
+      redrawAntennas()
+    })
+    return div
+  }
+  antennaToggleControl.addTo(map)
   // add attribution control
   const attribution = L.control.attribution({position: 'bottomright', prefix: false}).addTo(map)
   // updates attribution with given count of nodes
@@ -272,6 +339,7 @@
   const nodeLink = (num, label) => `<a href="#${num}" onclick="showNode(${num});return false;">${html(label)}</a>`
   // updates node map markers
   const updateNodes = async data => {
+    currentData = data
     const popupWasOpen = lastActiveNode && markersByNode[lastActiveNode]?.isPopupOpen()
     const detailsLayerWasPopulated = detailsLayer.getLayers().length > 0
     markersByNode = {}
@@ -427,6 +495,8 @@
           history.replaceState(null, '', `#${nodeNum}`)
           // draw precision rectangle, relation lines
           drawNodeDetails()
+          // draw antenna for this node (unless all are already shown)
+          if (!showAllAntennas) redrawAntennas()
         })
       if (nodeNum === lastActiveNode) {
         if (popupWasOpen) {
@@ -444,8 +514,8 @@
     })
     markers.addLayers(Object.values(markersByNode))
     reactivate()
-    // fetch and draw antenna sectors for active gateways
-    antennasLayer.clearLayers()
+    // fetch antenna data for active gateways
+    antennaDataByNode = {}
     await Promise.allSettled(
       Object.entries(data)
         .filter(([, n]) => n.lastMapReport)
@@ -455,21 +525,11 @@
             const r = await fetch(`/api/nodes/${id}/antenna`)
             if (!r.ok) return
             const {antenna} = await r.json()
-            if (!antenna) return
-            const lat = node.latitude / 10000000, lng = node.longitude / 10000000
-            const isDirectional = antenna.beam_angle > 0 && antenna.beam_angle < 360 && antenna.orientation != null
-            const shape = isDirectional
-              ? L.polygon(buildSector(lat, lng, orientToDeg(antenna.orientation), antenna.beam_angle / 2, 30000), antennaSectorStyle)
-              : L.circle([lat, lng], {radius: 30000, ...antennaSectorStyle})
-            const tip = `<b>${html(antenna.type ?? 'Antenne')}</b><br>` +
-              `Ausrichtung: ${html(String(antenna.orientation))}, ${antenna.beam_angle}° Öffnungswinkel` +
-              (antenna.gain ? `<br>Gewinn: ${html(antenna.gain)}` : '') +
-              (antenna.height_m ? `<br>Höhe: ${antenna.height_m} m` : '') +
-              (antenna.placement ? `<br>Montage: ${html(antenna.placement)}` : '')
-            shape.bindTooltip(tip, {opacity: 0.95}).addTo(antennasLayer)
-          } catch(e) { console.warn('antenna sector', id, e) }
+            if (antenna) antennaDataByNode[nodeNum] = antenna
+          } catch(e) { console.warn('antenna fetch', id, e) }
         })
     )
+    redrawAntennas()
   }
   // fetches node data, updates map, repeats
   const drawMap = async () => {
@@ -514,6 +574,7 @@
     if (window.location.hash) {
       history.replaceState(null, '', window.location.pathname)
     }
+    if (!showAllAntennas) antennasLayer.clearLayers()
   })
   // let's go!!!
   attribution.setPrefix('Loading node data&hellip;')
