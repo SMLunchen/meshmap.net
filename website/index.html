@@ -120,18 +120,56 @@
     color: #fff;
     font-size: 13px;
   }
-  .antenna-toggle {
+  .map-legend {
     background: white;
-    padding: 5px 10px;
+    padding: 8px 12px;
     font-family: "Inter", sans-serif;
-    font-size: 13px;
+    font-size: 12px;
+    min-width: 145px;
+    line-height: 1.4;
   }
-  .antenna-toggle label {
+  .map-legend .legend-title {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 5px;
+  }
+  .map-legend .legend-section {
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #888;
+    margin: 6px 0 3px;
+  }
+  .map-legend .legend-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    user-select: none;
+    gap: 7px;
+    margin-bottom: 2px;
+  }
+  .legend-swatch {
+    width: 13px;
+    height: 13px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    opacity: 0.75;
+  }
+  .legend-gateway-badge {
+    background: #2563eb;
+    border: 1.5px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+  .legend-divider {
+    border-top: 1px solid #e5e7eb;
+    margin: 6px 0;
   }
 </style>
 <script>
@@ -308,19 +346,38 @@
       },
     ],
   }).addTo(map)
-  // add antenna toggle control
-  const antennaToggleControl = L.control({position: 'bottomleft'})
-  antennaToggleControl.onAdd = () => {
-    const div = L.DomUtil.create('div', 'antenna-toggle leaflet-bar')
-    div.innerHTML = '<label><input type="checkbox" id="antenna-toggle"> Antennen anzeigen</label>'
+  // add legend + antenna toggle control
+  const legendControl = L.control({position: 'bottomleft'})
+  legendControl.onAdd = () => {
+    const div = L.DomUtil.create('div', 'map-legend leaflet-bar')
+    div.innerHTML = `
+      <div class="legend-title">Legende</div>
+      <div class="legend-section">Nodes</div>
+      <div class="legend-item">
+        <svg width="10" height="14" viewBox="0 0 10 14" flex-shrink="0"><path fill="#3d8bcd" d="M5 0C2.24 0 0 2.24 0 5c0 3.75 5 9 5 9s5-5.25 5-9C10 2.24 7.76 0 5 0zm0 6.5C4.17 6.5 3.5 5.83 3.5 5S4.17 3.5 5 3.5 6.5 4.17 6.5 5 5.83 6.5 5 6.5z"/></svg>
+        Node
+      </div>
+      <div class="legend-item">
+        <span class="legend-gateway-badge"><i class="fa fa-wifi" style="font-size:7px"></i></span>
+        MQTT Gateway
+      </div>
+      <div class="legend-section">Antennen</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#16a34a"></span>Richtantenne</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#2563eb"></span>Rundstrahler</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#dc2626"></span>Indoor</div>
+      <div class="legend-divider"></div>
+      <label class="legend-item" style="cursor:pointer;user-select:none">
+        <input type="checkbox" id="antenna-toggle"> Alle Antennen
+      </label>
+    `
     L.DomEvent.disableClickPropagation(div)
-    div.querySelector('input').addEventListener('change', e => {
+    div.querySelector('#antenna-toggle').addEventListener('change', e => {
       showAllAntennas = e.target.checked
       redrawAntennas()
     })
     return div
   }
-  antennaToggleControl.addTo(map)
+  legendControl.addTo(map)
   // add attribution control
   const attribution = L.control.attribution({position: 'bottomright', prefix: false}).addTo(map)
   // updates attribution with given count of nodes
@@ -435,6 +492,7 @@
         ${chUtil             ? `<tr><th>ChUtil</th><td>${chUtil.toFixed(2)}%</td></tr>`                              : ''}
         ${airUtilTx          ? `<tr><th>AirUtilTX</th><td>${airUtilTx.toFixed(2)}%</td></tr>`                        : ''}
         ${onlineLocalNodes   ? `<tr><th>Local nodes</th><td>${onlineLocalNodes}</td></tr>`                           : ''}
+        <!--ANTENNA-->
         ${precisionCorners   ? `<tr><th>Map precision</th><td>` +
                                `&#177;${Math.round(map.distance(...precisionCorners) / 2).toLocaleString()} m` +
                                ` (orange rectangle)</td></tr>`                                                       : ''}
@@ -488,7 +546,18 @@
         : new L.Icon.Default()
       markersByNode[nodeNum] = L.marker(position, {alt: 'Node', opacity, searchString, icon})
         .bindTooltip(tooltipContent, {opacity: 0.95})
-        .bindPopup(popupContent, {maxWidth: 600})
+        .bindPopup(() => {
+          const ant = antennaDataByNode[nodeNum]
+          if (!ant) return popupContent.replace('<!--ANTENNA-->', '')
+          const isDir = ant.beam_angle > 0 && ant.beam_angle < 360 && ant.orientation != null
+          const rows = [
+            `<tr><th>Antenne</th><td>${html(ant.type ?? '–')}${ant.placement ? ` (${html(ant.placement)})` : ''}</td></tr>`,
+            isDir ? `<tr><th>Ausrichtung</th><td>${html(String(ant.orientation))}, ${ant.beam_angle}° Öffnungswinkel</td></tr>` : '',
+            ant.gain ? `<tr><th>Antennengewinn</th><td>${parseFloat(ant.gain).toFixed(1)} dBi</td></tr>` : '',
+            ant.height_m ? `<tr><th>Antennenhöhe</th><td>${ant.height_m} m</td></tr>` : '',
+          ].join('')
+          return popupContent.replace('<!--ANTENNA-->', rows)
+        }, {maxWidth: 600})
         .on('popupopen', () => {
           // set last active
           lastActiveNode = nodeNum
