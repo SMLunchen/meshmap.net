@@ -455,12 +455,12 @@
             const r = await fetch(`/api/nodes/${id}/antenna`)
             if (!r.ok) return
             const {antenna} = await r.json()
-            if (!antenna?.beam_angle || !antenna?.orientation) return
+            if (!antenna) return
             const lat = node.latitude / 10000000, lng = node.longitude / 10000000
-            const bearing = orientToDeg(antenna.orientation)
-            const shape = antenna.beam_angle >= 360
-              ? L.circle([lat, lng], {radius: 30000, ...antennaSectorStyle})
-              : L.polygon(buildSector(lat, lng, bearing, antenna.beam_angle / 2, 30000), antennaSectorStyle)
+            const isDirectional = antenna.beam_angle > 0 && antenna.beam_angle < 360 && antenna.orientation != null
+            const shape = isDirectional
+              ? L.polygon(buildSector(lat, lng, orientToDeg(antenna.orientation), antenna.beam_angle / 2, 30000), antennaSectorStyle)
+              : L.circle([lat, lng], {radius: 30000, ...antennaSectorStyle})
             const tip = `<b>${html(antenna.type ?? 'Antenne')}</b><br>` +
               `Ausrichtung: ${html(String(antenna.orientation))}, ${antenna.beam_angle}° Öffnungswinkel` +
               (antenna.gain ? `<br>Gewinn: ${html(antenna.gain)}` : '') +
