@@ -452,7 +452,7 @@
         .map(async ([nodeNum, node]) => {
           const id = `!${Number(nodeNum).toString(16)}`
           try {
-            const r = await fetch(`https://mqtt-request.meshhessen.de/api/nodes/${id}/antenna`)
+            const r = await fetch(`/api/nodes/${id}/antenna`)
             if (!r.ok) return
             const {antenna} = await r.json()
             if (!antenna?.beam_angle || !antenna?.orientation) return
@@ -467,7 +467,7 @@
               (antenna.height_m ? `<br>Höhe: ${antenna.height_m} m` : '') +
               (antenna.placement ? `<br>Montage: ${html(antenna.placement)}` : '')
             shape.bindTooltip(tip, {opacity: 0.95}).addTo(antennasLayer)
-          } catch {}
+          } catch(e) { console.warn('antenna sector', id, e) }
         })
     )
   }
