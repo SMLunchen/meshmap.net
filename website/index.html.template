@@ -205,7 +205,8 @@
   let showAllAntennas = false
   let currentData = {}
   const getAntennaStyle = antenna => {
-    const color = antenna.placement === 'indoor' ? '#dc2626' : '#2563eb'
+    const isDirectional = antenna.beam_angle > 0 && antenna.beam_angle < 360 && antenna.orientation != null
+    const color = antenna.placement === 'indoor' ? '#dc2626' : isDirectional ? '#16a34a' : '#2563eb'
     return {color, weight: 1.5, opacity: 0.6, fillColor: color, fillOpacity: 0.12}
   }
   const getAntennaRadius = antenna => {
