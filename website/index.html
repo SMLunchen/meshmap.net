@@ -109,6 +109,17 @@
       display: none;
     }
   }
+  .gateway-marker {
+    background: #2563eb;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 13px;
+  }
 </style>
 <script>
   const toggleDark = () => {
@@ -255,7 +266,7 @@
     Object.entries(data).forEach(([nodeNum, node]) => {
       const {
         longName, shortName, hwModel, role,
-        fwVersion, region, modemPreset, hasDefaultCh, onlineLocalNodes,
+        fwVersion, region, modemPreset, hasDefaultCh, onlineLocalNodes, lastMapReport,
         latitude, longitude, altitude, precision,
         batteryLevel, voltage, chUtil, airUtilTx, uptime,
         temperature, relativeHumidity, barometricPressure, lux,
@@ -386,7 +397,10 @@
       `
       const searchString = `${longName} (${shortName}) ${id}`
       nodesBySearchString[searchString] = nodeNum
-      markersByNode[nodeNum] = L.marker(position, {alt: 'Node', opacity, searchString})
+      const icon = lastMapReport
+        ? L.divIcon({html: '<i class="fa fa-wifi"></i>', className: 'gateway-marker', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -13]})
+        : new L.Icon.Default()
+      markersByNode[nodeNum] = L.marker(position, {alt: 'Node', opacity, searchString, icon})
         .bindTooltip(tooltipContent, {opacity: 0.95})
         .bindPopup(popupContent, {maxWidth: 600})
         .on('popupopen', () => {
