@@ -244,7 +244,7 @@
   let currentData = {}
   const getAntennaStyle = antenna => {
     const isDirectional = antenna.beam_angle > 0 && antenna.beam_angle < 360 && antenna.orientation != null
-    const color = antenna.placement === 'indoor' ? '#dc2626' : isDirectional ? '#16a34a' : '#2563eb'
+    const color = antenna.placement === 'indoor' ? '#dc2626' : isDirectional ? '#7c3aed' : '#2563eb'
     return {color, weight: 1.5, opacity: 0.6, fillColor: color, fillOpacity: 0.12}
   }
   const getAntennaRadius = antenna => {
@@ -362,7 +362,7 @@
         MQTT Gateway
       </div>
       <div class="legend-section">Antennen</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#16a34a"></span>Richtantenne</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#7c3aed"></span>Richtantenne</div>
       <div class="legend-item"><span class="legend-swatch" style="background:#2563eb"></span>Rundstrahler</div>
       <div class="legend-item"><span class="legend-swatch" style="background:#dc2626"></span>Indoor</div>
       <div class="legend-divider"></div>
