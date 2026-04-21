@@ -190,6 +190,7 @@
 <div id="header">
   <div>
     <a href="${SITE_URL}" title="${SITE_TITLE}">${SITE_TITLE}</a>
+    <span id="node-stats" style="font-size:11px;color:#999;margin-left:10px;font-weight:normal"></span>
   </div>
   <div>
     <a href="#" onclick="toggleDark();return false;" title="Toggle dark mode">
@@ -214,6 +215,7 @@
 <script src="https://unpkg.com/leaflet-easybutton@2.4.0/src/easy-button.js"></script>
 <script src="https://unpkg.com/leaflet-search@4.0.0/dist/leaflet-search.min.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
   let lastActiveNode
   let markersByNode = {}
@@ -268,6 +270,18 @@
       antenna.placement ? `Montage: ${html(antenna.placement)}` : '',
     ].filter(Boolean).join('<br>')
     return shape.bindTooltip(tip, {opacity: 0.95})
+  }
+  const snrColor = snr => snr >= 5 ? '#16a34a' : snr >= 0 ? '#f59e0b' : snr >= -10 ? '#f97316' : '#dc2626'
+  let showHeatmap = false
+  let heatLayer = null
+  const updateHeatmap = () => {
+    if (!showHeatmap || !heatLayer) return
+    const now = Date.now() / 1000
+    const pts = Object.values(currentData).map(n => {
+      const age = now - Math.max(...Object.values(n.seenBy))
+      return [n.latitude / 10000000, n.longitude / 10000000, age < 3600 ? 1.0 : age < 21600 ? 0.6 : 0.3]
+    })
+    heatLayer.setLatLngs(pts)
   }
   const redrawAntennas = () => {
     antennasLayer.clearLayers()
@@ -365,15 +379,33 @@
       <div class="legend-item"><span class="legend-swatch" style="background:#7c3aed"></span>Richtantenne</div>
       <div class="legend-item"><span class="legend-swatch" style="background:#2563eb"></span>Rundstrahler</div>
       <div class="legend-item"><span class="legend-swatch" style="background:#dc2626"></span>Indoor</div>
+      <div class="legend-section">Verbindungen (SNR)</div>
+      <div class="legend-item"><span style="display:inline-block;width:22px;height:3px;background:#16a34a;border-radius:2px;flex-shrink:0"></span>&gt; 5 dB</div>
+      <div class="legend-item"><span style="display:inline-block;width:22px;height:3px;background:#f59e0b;border-radius:2px;flex-shrink:0"></span>0–5 dB</div>
+      <div class="legend-item"><span style="display:inline-block;width:22px;height:3px;background:#f97316;border-radius:2px;flex-shrink:0"></span>−10–0 dB</div>
+      <div class="legend-item"><span style="display:inline-block;width:22px;height:3px;background:#dc2626;border-radius:2px;flex-shrink:0"></span>&lt; −10 dB</div>
       <div class="legend-divider"></div>
       <label class="legend-item" style="cursor:pointer;user-select:none">
         <input type="checkbox" id="antenna-toggle"> Alle Antennen
+      </label>
+      <label class="legend-item" style="cursor:pointer;user-select:none">
+        <input type="checkbox" id="heatmap-toggle"> Heatmap
       </label>
     `
     L.DomEvent.disableClickPropagation(div)
     div.querySelector('#antenna-toggle').addEventListener('change', e => {
       showAllAntennas = e.target.checked
       redrawAntennas()
+    })
+    div.querySelector('#heatmap-toggle').addEventListener('change', e => {
+      showHeatmap = e.target.checked
+      if (showHeatmap) {
+        if (!heatLayer) heatLayer = L.heatLayer([], {radius: 25, blur: 15, maxZoom: 17}).addTo(map)
+        updateHeatmap()
+      } else {
+        heatLayer?.remove()
+        heatLayer = null
+      }
     })
     return div
   }
@@ -398,6 +430,13 @@
   // updates node map markers
   const updateNodes = async data => {
     currentData = data
+    const now = Date.now() / 1000
+    const statsEl = document.getElementById('node-stats')
+    if (statsEl) {
+      const gateways = Object.values(data).filter(n => n.lastMapReport).length
+      const recent = Object.values(data).filter(n => Math.max(...Object.values(n.seenBy)) > now - 3600).length
+      statsEl.textContent = `${Object.keys(data).length} Nodes · ${gateways} Gateways · ${recent} aktiv <1h`
+    }
     const popupWasOpen = lastActiveNode && markersByNode[lastActiveNode]?.isPopupOpen()
     const detailsLayerWasPopulated = detailsLayer.getLayers().length > 0
     markersByNode = {}
@@ -470,7 +509,9 @@
             ${neighbors?.[relatedNum]?.snr ? `<tr><th>SNR</th><td>${neighbors[relatedNum].snr} dB</td></tr>` : ''}
             </tbody></table>
           `
-          L.polyline([position, relatedPosition])
+          const snr = neighbors?.[relatedNum]?.snr
+          const lineColor = (relationObj.neighbor && snr != null) ? snrColor(snr) : '#94a3b8'
+          L.polyline([position, relatedPosition], {color: lineColor, weight: 2, opacity: 0.85})
             .bindTooltip(relationContent, {opacity: 0.95, sticky: true})
             .on('click', () => showNode(relatedNum))
             .addTo(detailsLayer)
@@ -600,6 +641,7 @@
         })
     )
     redrawAntennas()
+    updateHeatmap()
   }
   // fetches node data, updates map, repeats
   const drawMap = async () => {
