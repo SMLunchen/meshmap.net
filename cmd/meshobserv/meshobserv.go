@@ -6,6 +6,7 @@ import (
 	"flag"
 	"io/fs"
 	"log"
+	"math"
 	"os"
 	"os/signal"
 	"regexp"
@@ -22,8 +23,8 @@ import (
 
 const (
 	NodeExpiration     = 86400 // 24 hr
-	NeighborExpiration = 28000  // 2 hr
-	MetricsExpiration  = 28800  // 2 hr
+	NeighborExpiration = 28000 // ~7.8 hr
+	MetricsExpiration  = 28800 // 8 hr
 	PruneWriteInterval = time.Minute
 	RateLimitCount     = 300
 	RateLimitDuration  = time.Minute
@@ -35,8 +36,55 @@ var (
 	Receiving  atomic.Bool
 )
 
-func handleMessage(from uint32, topic string, portNum generated.PortNum, payload []byte) {
+// recordTracerouteHops records directed RF edges from a traceroute path segment list.
+// The full chain is origin, route..., dest; snr[i] is the SNR at which chain[i+1]
+// received chain[i], scaled by 4; math.MinInt8 means unknown. A final snr entry beyond
+// route means dest itself completed the reception. Only already-known nodes are updated.
+func recordTracerouteHops(origin, dest uint32, route []uint32, snr []int32) {
+	chain := make([]uint32, 0, len(route)+2)
+	chain = append(chain, origin)
+	chain = append(chain, route...)
+	if len(snr) == len(route)+1 && dest != 0 && dest != 0xffffffff {
+		chain = append(chain, dest)
+	}
+	NodesMutex.Lock()
+	for i := 0; i < len(chain)-1 && i < len(snr); i++ {
+		transmitter, receiver := chain[i], chain[i+1]
+		if transmitter == 0 || transmitter == 0xffffffff || receiver == 0 || transmitter == receiver {
+			continue
+		}
+		node := Nodes[receiver]
+		if node == nil {
+			continue
+		}
+		info := &meshtastic.NeighborInfo{Source: meshtastic.NeighborSourceTraceroute}
+		if snr[i] != math.MinInt8 {
+			s := float32(snr[i]) / 4
+			info.Snr = &s
+		}
+		node.UpdateNeighbor(transmitter, info)
+	}
+	NodesMutex.Unlock()
+}
+
+func handleMessage(from uint32, topic string, portNum generated.PortNum, payload []byte, info *meshtastic.PacketInfo) {
 	Receiving.Store(true)
+	// a packet with hop_start == hop_limit was received by the uplinking gateway
+	// directly over RF (zero hops): record it as a measured RF link at the gateway
+	if info != nil && info.GatewayId != 0 && info.GatewayId != from &&
+		info.HopStart > 0 && info.HopStart == info.HopLimit &&
+		(info.RxSnr != 0 || info.RxRssi != 0) {
+		NodesMutex.Lock()
+		if gw := Nodes[info.GatewayId]; gw != nil {
+			snr := info.RxSnr
+			gw.UpdateNeighbor(from, &meshtastic.NeighborInfo{
+				Snr:    &snr,
+				Rssi:   info.RxRssi,
+				Source: meshtastic.NeighborSourceGateway,
+			})
+		}
+		NodesMutex.Unlock()
+	}
 	switch portNum {
 	case generated.PortNum_TEXT_MESSAGE_APP:
 		log.Printf("[msg] (%v) <%v> %s", topic, from, payload)
@@ -149,9 +197,34 @@ func handleMessage(from uint32, topic string, portNum generated.PortNum, payload
 			if neighborNum == 0 {
 				continue
 			}
-			Nodes[from].UpdateNeighborInfo(neighborNum, neighbor.GetSnr())
+			snr := neighbor.GetSnr()
+			Nodes[from].UpdateNeighbor(neighborNum, &meshtastic.NeighborInfo{
+				Snr:    &snr,
+				Source: meshtastic.NeighborSourceNeighborInfo,
+			})
 		}
 		NodesMutex.Unlock()
+	case generated.PortNum_TRACEROUTE_APP:
+		var routeDiscovery generated.RouteDiscovery
+		if err := proto.Unmarshal(payload, &routeDiscovery); err != nil {
+			log.Printf("[warn] could not parse RouteDiscovery payload from %v on %v: %v", from, topic, err)
+			return
+		}
+		if info == nil {
+			return
+		}
+		// requests travel requester->destination collecting route/snr_towards;
+		// replies (request_id set) carry the completed forward path and collect
+		// route_back/snr_back on the way back to the requester
+		isReply := info.RequestId != 0
+		towardsOrigin, towardsDest := from, info.To
+		if isReply {
+			towardsOrigin, towardsDest = info.To, from
+		}
+		recordTracerouteHops(towardsOrigin, towardsDest, routeDiscovery.GetRoute(), routeDiscovery.GetSnrTowards())
+		if isReply {
+			recordTracerouteHops(from, info.To, routeDiscovery.GetRouteBack(), routeDiscovery.GetSnrBack())
+		}
 	case generated.PortNum_MAP_REPORT_APP:
 		var mapReport generated.MapReport
 		if err := proto.Unmarshal(payload, &mapReport); err != nil {

@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 
 	"github.com/brianshea2/meshmap.net/internal/meshtastic/generated"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -30,12 +31,24 @@ func NewBlockCipher(key []byte) cipher.Block {
 	return c
 }
 
+// PacketInfo carries per-packet metadata from the MeshPacket and its ServiceEnvelope:
+// RF reception values measured by the uplinking gateway and addressing/hop details
+type PacketInfo struct {
+	GatewayId uint32 // node number of the uplinking gateway, 0 if unknown
+	To        uint32
+	RequestId uint32 // non-zero for response packets
+	RxSnr     float32
+	RxRssi    int32
+	HopStart  uint32
+	HopLimit  uint32
+}
+
 type MQTTClient struct {
 	Topics         []string
 	TopicRegex     *regexp.Regexp
 	Accept         func(from uint32) bool
 	BlockCipher    cipher.Block
-	MessageHandler func(from uint32, topic string, portNum generated.PortNum, payload []byte)
+	MessageHandler func(from uint32, topic string, portNum generated.PortNum, payload []byte, info *PacketInfo)
 	mqtt.Client
 }
 
@@ -138,7 +151,21 @@ func (c *MQTTClient) handleMessage(_ mqtt.Client, msg mqtt.Message) {
 			return
 		}
 	}
-	c.MessageHandler(from, topic, data.GetPortnum(), data.GetPayload())
+	var gatewayId uint32
+	if gw := envelope.GetGatewayId(); len(gw) > 1 && gw[0] == '!' {
+		if n, err := strconv.ParseUint(gw[1:], 16, 32); err == nil {
+			gatewayId = uint32(n)
+		}
+	}
+	c.MessageHandler(from, topic, data.GetPortnum(), data.GetPayload(), &PacketInfo{
+		GatewayId: gatewayId,
+		To:        packet.GetTo(),
+		RequestId: data.GetRequestId(),
+		RxSnr:     packet.GetRxSnr(),
+		RxRssi:    packet.GetRxRssi(),
+		HopStart:  packet.GetHopStart(),
+		HopLimit:  packet.GetHopLimit(),
+	})
 }
 
 func init() {

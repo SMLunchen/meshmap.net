@@ -22,9 +22,20 @@ func cleanFloat(f float32) float32 {
 	return float32(math.Round(float64(f*1000)) / 1000)
 }
 
+// NeighborInfo source values
+const (
+	NeighborSourceNeighborInfo = "ni" // NEIGHBORINFO_APP
+	NeighborSourceTraceroute   = "tr" // TRACEROUTE_APP hop
+	NeighborSourceGateway      = "gw" // zero-hop packet received by an MQTT gateway
+)
+
+// NeighborInfo describes a directed RF link: the owning node heard the neighbor at Snr/Rssi.
+// Snr is a pointer so a real measurement of 0.0 dB is distinguishable from "unknown".
 type NeighborInfo struct {
-	Snr     float32 `json:"snr,omitempty"`
-	Updated int64   `json:"updated"`
+	Snr     *float32 `json:"snr,omitempty"`
+	Rssi    int32    `json:"rssi,omitempty"`
+	Source  string   `json:"src,omitempty"`
+	Updated int64    `json:"updated"`
 }
 
 type Node struct {
@@ -202,14 +213,16 @@ func (node *Node) UpdateMapReport(fwVersion, region, modemPreset string, hasDefa
 	node.LastMapReport = time.Now().Unix()
 }
 
-func (node *Node) UpdateNeighborInfo(neighborNum uint32, snr float32) {
+func (node *Node) UpdateNeighbor(neighborNum uint32, info *NeighborInfo) {
 	if node.Neighbors == nil {
 		node.Neighbors = make(map[uint32]*NeighborInfo)
 	}
-	node.Neighbors[neighborNum] = &NeighborInfo{
-		Snr:     cleanFloat(snr),
-		Updated: time.Now().Unix(),
+	if info.Snr != nil {
+		snr := cleanFloat(*info.Snr)
+		info.Snr = &snr
 	}
+	info.Updated = time.Now().Unix()
+	node.Neighbors[neighborNum] = info
 }
 
 func (node *Node) UpdatePosition(latitude, longitude, altitude int32, precision uint32) {

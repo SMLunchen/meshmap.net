@@ -332,6 +332,10 @@
     detailsLayer.clearLayers()
     if (!showAllAntennas) antennasLayer.clearLayers()
   })
+  // add layer for the global RF link overlay
+  const connectionsLayer = L.layerGroup().addTo(map)
+  let showAllConnections = false
+  let currentRelations = {}
   // add search control
   map.addControl(new L.Control.Search({
     layer: markers,
@@ -389,6 +393,9 @@
         <input type="checkbox" id="antenna-toggle"> Alle Antennen
       </label>
       <label class="legend-item" style="cursor:pointer;user-select:none">
+        <input type="checkbox" id="connections-toggle"> Alle RF-Links
+      </label>
+      <label class="legend-item" style="cursor:pointer;user-select:none">
         <input type="checkbox" id="heatmap-toggle"> Heatmap
       </label>
     `
@@ -396,6 +403,10 @@
     div.querySelector('#antenna-toggle').addEventListener('change', e => {
       showAllAntennas = e.target.checked
       redrawAntennas()
+    })
+    div.querySelector('#connections-toggle').addEventListener('change', e => {
+      showAllConnections = e.target.checked
+      redrawConnections()
     })
     div.querySelector('#heatmap-toggle').addEventListener('change', e => {
       showHeatmap = e.target.checked
@@ -427,6 +438,49 @@
   })
   // generates html for a node link
   const nodeLink = (num, label) => `<a href="#${num}" onclick="showNode(${num});return false;">${html(label)}</a>`
+  const relationSourceNames = {ni: 'NeighborInfo', tr: 'Traceroute', gw: 'Gateway RF'}
+  // builds a relation line between two nodes: SNR-colored (worst of both directions),
+  // with a tooltip showing per-direction SNR/RSSI, link source and age
+  const makeRelationLine = (nodeNum, relatedNum, relationObj, data) => {
+    const a = data[nodeNum], b = data[relatedNum]
+    if (a === undefined || b === undefined) return null
+    const posA = [a.latitude, a.longitude].map(x => x / 10000000)
+    const posB = [b.latitude, b.longitude].map(x => x / 10000000)
+    const heard = a.neighbors?.[relatedNum] // a heard b
+    const sent = b.neighbors?.[nodeNum]     // b heard a
+    const snrs = [heard?.snr, sent?.snr].filter(v => v != null)
+    const lineColor = relationObj.neighbor && snrs.length ? snrColor(Math.min(...snrs)) : '#94a3b8'
+    const updated = Math.max(heard?.updated ?? 0, sent?.updated ?? 0)
+    const sources = [...new Set([heard?.src, sent?.src].filter(Boolean).map(s => relationSourceNames[s] ?? s))]
+    const relationContent = `
+      <table><tbody>
+      <tr><th>Related node</th><td>${nodeLink(relatedNum, `!${Number(relatedNum).toString(16)}`)}</td></tr>
+      <tr><th>Relation type</th><td>${[
+        relationObj.neighbor && `RF link${sources.length ? ` (${sources.join(', ')})` : ''}`,
+        relationObj.mqtt && 'MQTT uplink',
+      ].filter(v => v).join(', ')}</td></tr>
+      <tr><th>Distance</th><td>${Math.round(map.distance(posA, posB)).toLocaleString()} m</td></tr>
+      ${sent?.snr != null ? `<tr><th>SNR self &rarr; related</th><td>${sent.snr} dB${sent.rssi ? ` / ${sent.rssi} dBm` : ''}</td></tr>` : ''}
+      ${heard?.snr != null ? `<tr><th>SNR related &rarr; self</th><td>${heard.snr} dB${heard.rssi ? ` / ${heard.rssi} dBm` : ''}</td></tr>` : ''}
+      ${updated ? `<tr><th>Last heard</th><td>${since(updated)}</td></tr>` : ''}
+      </tbody></table>
+    `
+    return L.polyline([posA, posB], {color: lineColor, weight: 2, opacity: 0.85})
+      .bindTooltip(relationContent, {opacity: 0.95, sticky: true})
+      .on('click', () => showNode(relatedNum))
+  }
+  // draws all known RF links when the overlay is enabled
+  const redrawConnections = () => {
+    connectionsLayer.clearLayers()
+    if (!showAllConnections) return
+    Object.entries(currentRelations).forEach(([nodeNum, relations]) => {
+      Object.entries(relations).forEach(([relatedNum, relationObj]) => {
+        if (Number(nodeNum) >= Number(relatedNum) || !relationObj.neighbor) return
+        const line = makeRelationLine(nodeNum, relatedNum, relationObj, currentData)
+        if (line) line.setStyle({weight: 1.5, opacity: 0.6}).addTo(connectionsLayer)
+      })
+    })
+  }
   // updates node map markers
   const updateNodes = async data => {
     currentData = data
@@ -497,24 +551,7 @@
         }
         // relation lines
         Object.entries(relationsByNode[nodeNum]).forEach(([relatedNum, relationObj]) => {
-          if (data[relatedNum] === undefined) {
-            return
-          }
-          const relatedPosition = [data[relatedNum].latitude, data[relatedNum].longitude].map(x => x / 10000000)
-          const relationContent = `
-            <table><tbody>
-            <tr><th>Related node</th><td>${nodeLink(relatedNum, `!${Number(relatedNum).toString(16)}`)}</td></tr>
-            <tr><th>Relation type</th><td>${[relationObj.neighbor && 'Neighbor', relationObj.mqtt && 'MQTT uplink'].filter(v => v).join(', ')}</td></tr>
-            <tr><th>Distance</th><td>${Math.round(map.distance(position, relatedPosition)).toLocaleString()} m</td></tr>
-            ${neighbors?.[relatedNum]?.snr ? `<tr><th>SNR</th><td>${neighbors[relatedNum].snr} dB</td></tr>` : ''}
-            </tbody></table>
-          `
-          const snr = neighbors?.[relatedNum]?.snr
-          const lineColor = (relationObj.neighbor && snr != null) ? snrColor(snr) : '#94a3b8'
-          L.polyline([position, relatedPosition], {color: lineColor, weight: 2, opacity: 0.85})
-            .bindTooltip(relationContent, {opacity: 0.95, sticky: true})
-            .on('click', () => showNode(relatedNum))
-            .addTo(detailsLayer)
+          makeRelationLine(nodeNum, relatedNum, relationObj, data)?.addTo(detailsLayer)
         })
       }
       const lastSeen = Math.max(...Object.values(seenBy))
@@ -625,6 +662,8 @@
     })
     markers.addLayers(Object.values(markersByNode))
     reactivate()
+    currentRelations = relationsByNode
+    redrawConnections()
     // fetch antenna data for active gateways
     antennaDataByNode = {}
     await Promise.allSettled(

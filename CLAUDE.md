@@ -58,14 +58,20 @@ There are no tests in this project.
 ### Key Constants (`cmd/meshobserv/meshobserv.go`)
 | Constant | Value | Meaning |
 |---|---|---|
-| `NodeExpiration` | 21600s (6hr) | Remove node position after 6hr without update |
-| `NeighborExpiration` | 7200s (2hr) | Remove LoRa neighbor links after 2hr |
-| `MetricsExpiration` | 7200s (2hr) | Remove telemetry after 2hr |
+| `NodeExpiration` | 86400s (24hr) | Remove node position after 24hr without update |
+| `NeighborExpiration` | 28000s (~7.8hr) | Remove LoRa neighbor links after ~7.8hr |
+| `MetricsExpiration` | 28800s (8hr) | Remove telemetry after 8hr |
 | `RateLimitCount` | 300/min | Per-node message rate limit |
 | `PruneWriteInterval` | 1 min | How often NodeDB is pruned and written to disk |
 
 ### Message Types Handled
-`POSITION_APP`, `NODEINFO_APP`, `TELEMETRY_APP` (device + environment), `NEIGHBORINFO_APP`, `MAP_REPORT_APP`, `TEXT_MESSAGE_APP` (logged only)
+`POSITION_APP`, `NODEINFO_APP`, `TELEMETRY_APP` (device + environment), `NEIGHBORINFO_APP`, `TRACEROUTE_APP` (per-hop SNR edges), `MAP_REPORT_APP`, `TEXT_MESSAGE_APP` (logged only)
+
+### RF Link Sources (`Node.Neighbors`)
+Directed RF edges ("node heard neighbor at SNR") are merged into one `Neighbors` map from three sources, tagged via `src` in `nodes.json`:
+- `ni` — NEIGHBORINFO_APP reports
+- `tr` — TRACEROUTE_APP hops (`route`/`snr_towards`, `route_back`/`snr_back`; SNR scaled by 4, -128 = unknown)
+- `gw` — zero-hop packets (`hop_start == hop_limit`) received directly over RF by an MQTT gateway, with the gateway's measured `rx_snr`/`rx_rssi` (from `PacketInfo` passed through the message handler)
 
 ### Frontend (`website/index.html`)
 Single HTML file with inline CSS and JS (~467 lines). No framework, no build step. Key libraries loaded from CDN:
