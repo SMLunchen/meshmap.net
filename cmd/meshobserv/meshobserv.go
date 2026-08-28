@@ -53,6 +53,10 @@ func recordTracerouteHops(origin, dest uint32, route []uint32, snr []int32) {
 		if transmitter == 0 || transmitter == 0xffffffff || receiver == 0 || transmitter == receiver {
 			continue
 		}
+		// rx_snr of exactly 0 means the hop crossed MQTT (downlink), not RF
+		if snr[i] == 0 {
+			continue
+		}
 		node := Nodes[receiver]
 		if node == nil {
 			continue
@@ -70,8 +74,10 @@ func recordTracerouteHops(origin, dest uint32, route []uint32, snr []int32) {
 func handleMessage(from uint32, topic string, portNum generated.PortNum, payload []byte, info *meshtastic.PacketInfo) {
 	Receiving.Store(true)
 	// a packet with hop_start == hop_limit was received by the uplinking gateway
-	// directly over RF (zero hops): record it as a measured RF link at the gateway
-	if info != nil && info.GatewayId != 0 && info.GatewayId != from &&
+	// directly over RF (zero hops): record it as a measured RF link at the gateway;
+	// via_mqtt packets are rebroadcasts of MQTT-downlinked traffic, where the RF
+	// measurement belongs to the downlinking gateway, not the original sender
+	if info != nil && info.GatewayId != 0 && info.GatewayId != from && !info.ViaMqtt &&
 		info.HopStart > 0 && info.HopStart == info.HopLimit &&
 		(info.RxSnr != 0 || info.RxRssi != 0) {
 		NodesMutex.Lock()
@@ -198,6 +204,11 @@ func handleMessage(from uint32, topic string, portNum generated.PortNum, payload
 				continue
 			}
 			snr := neighbor.GetSnr()
+			// exact 0 is the fingerprint of an MQTT-learned "neighbor"
+			// (older firmware records MQTT-downlinked nodes with rx_snr 0)
+			if snr == 0 {
+				continue
+			}
 			Nodes[from].UpdateNeighbor(neighborNum, &meshtastic.NeighborInfo{
 				Snr:    &snr,
 				Source: meshtastic.NeighborSourceNeighborInfo,

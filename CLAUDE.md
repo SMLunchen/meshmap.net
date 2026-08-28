@@ -71,7 +71,9 @@ There are no tests in this project.
 Directed RF edges ("node heard neighbor at SNR") are merged into one `Neighbors` map from three sources, tagged via `src` in `nodes.json`:
 - `ni` — NEIGHBORINFO_APP reports
 - `tr` — TRACEROUTE_APP hops (`route`/`snr_towards`, `route_back`/`snr_back`; SNR scaled by 4, -128 = unknown)
-- `gw` — zero-hop packets (`hop_start == hop_limit`) received directly over RF by an MQTT gateway, with the gateway's measured `rx_snr`/`rx_rssi` (from `PacketInfo` passed through the message handler)
+- `gw` — zero-hop packets (`hop_start == hop_limit`, not `via_mqtt`) received directly over RF by an MQTT gateway, with the gateway's measured `rx_snr`/`rx_rssi` (from `PacketInfo` passed through the message handler)
+
+An SNR of exactly 0 in `ni`/`tr` data is the fingerprint of an MQTT crossing (firmware sets `rx_snr = 0` for packets received via MQTT downlink), not an RF measurement — such entries are skipped to avoid phantom RF links between topographically impossible partners.
 
 ### Frontend (`website/index.html`)
 Single HTML file with inline CSS and JS (~467 lines). No framework, no build step. Key libraries loaded from CDN:

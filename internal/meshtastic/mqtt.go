@@ -37,6 +37,7 @@ type PacketInfo struct {
 	GatewayId uint32 // node number of the uplinking gateway, 0 if unknown
 	To        uint32
 	RequestId uint32 // non-zero for response packets
+	ViaMqtt   bool   // packet traversed MQTT before reaching the gateway
 	RxSnr     float32
 	RxRssi    int32
 	HopStart  uint32
@@ -161,6 +162,7 @@ func (c *MQTTClient) handleMessage(_ mqtt.Client, msg mqtt.Message) {
 		GatewayId: gatewayId,
 		To:        packet.GetTo(),
 		RequestId: data.GetRequestId(),
+		ViaMqtt:   packet.GetViaMqtt(),
 		RxSnr:     packet.GetRxSnr(),
 		RxRssi:    packet.GetRxRssi(),
 		HopStart:  packet.GetHopStart(),
