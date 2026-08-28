@@ -132,6 +132,14 @@
     font-weight: 700;
     font-size: 13px;
     margin-bottom: 5px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .map-legend.collapsed .legend-title {
+    margin-bottom: 0;
+  }
+  .map-legend.collapsed #legend-body {
+    display: none;
   }
   .map-legend .legend-section {
     font-weight: 600;
@@ -369,7 +377,8 @@
   legendControl.onAdd = () => {
     const div = L.DomUtil.create('div', 'map-legend leaflet-bar')
     div.innerHTML = `
-      <div class="legend-title">Legende</div>
+      <div class="legend-title" title="Legende ein-/ausklappen">Legende <span id="legend-caret" style="float:right">&#9662;</span></div>
+      <div id="legend-body">
       <div class="legend-section">Nodes</div>
       <div class="legend-item">
         <svg width="10" height="14" viewBox="0 0 10 14" flex-shrink="0"><path fill="#3d8bcd" d="M5 0C2.24 0 0 2.24 0 5c0 3.75 5 9 5 9s5-5.25 5-9C10 2.24 7.76 0 5 0zm0 6.5C4.17 6.5 3.5 5.83 3.5 5S4.17 3.5 5 3.5 6.5 4.17 6.5 5 5.83 6.5 5 6.5z"/></svg>
@@ -398,8 +407,24 @@
       <label class="legend-item" style="cursor:pointer;user-select:none">
         <input type="checkbox" id="heatmap-toggle"> Heatmap
       </label>
+      </div>
     `
     L.DomEvent.disableClickPropagation(div)
+    const legendCaret = div.querySelector('#legend-caret')
+    const setLegendCollapsed = collapsed => {
+      div.classList.toggle('collapsed', collapsed)
+      legendCaret.innerHTML = collapsed ? '&#9652;' : '&#9662;'
+    }
+    div.querySelector('.legend-title').addEventListener('click', () => {
+      const collapsed = !div.classList.contains('collapsed')
+      if (collapsed) {
+        window.localStorage.setItem('legendCollapsed', '1')
+      } else {
+        window.localStorage.removeItem('legendCollapsed')
+      }
+      setLegendCollapsed(collapsed)
+    })
+    setLegendCollapsed(!!window.localStorage.getItem('legendCollapsed'))
     div.querySelector('#antenna-toggle').addEventListener('change', e => {
       showAllAntennas = e.target.checked
       redrawAntennas()
