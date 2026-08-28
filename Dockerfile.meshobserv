@@ -7,7 +7,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev git && \
     rm -rf /var/lib/apt/lists/*
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-RUN git clone --depth 1 https://github.com/meshtastic/protobufs.git /tmp/protobufs && \
+# pin to a release tag: unreleased master can break the Go build
+# (e.g. AS3935Config vs AS3935_config both generate the same Go identifier)
+ARG PROTOBUFS_VERSION=v2.7.26
+RUN git clone --depth 1 --branch ${PROTOBUFS_VERSION} https://github.com/meshtastic/protobufs.git /tmp/protobufs && \
     protoc \
         -I=/tmp/protobufs \
         -I=/usr/include \
