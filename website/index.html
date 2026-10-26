@@ -109,16 +109,30 @@
       display: none;
     }
   }
-  .gateway-marker {
-    background: #2563eb;
+  .node-marker {
     border: 2px solid #fff;
     border-radius: 50%;
+    box-sizing: border-box;
     box-shadow: 0 2px 5px rgba(0,0,0,0.35);
     display: flex;
     align-items: center;
     justify-content: center;
     color: #fff;
     font-size: 13px;
+  }
+  .legend-dot {
+    width: 13px;
+    height: 13px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 6px;
   }
   .map-legend {
     background: white;
@@ -279,6 +293,22 @@
     return shape.bindTooltip(tip, {opacity: 0.95})
   }
   const snrColor = snr => snr >= 5 ? '#16a34a' : snr >= 0 ? '#f59e0b' : snr >= -10 ? '#f97316' : '#dc2626'
+  // marker colors by device role (ROUTER_CLIENT is the deprecated router alias)
+  const roleColors = {
+    ROUTER: '#dc2626',
+    ROUTER_CLIENT: '#dc2626',
+    ROUTER_LATE: '#f97316',
+    REPEATER: '#9333ea',
+    CLIENT_BASE: '#16a34a',
+    CLIENT_MUTE: '#64748b',
+  }
+  const roleColor = role => roleColors[role] ?? '#2563eb'
+  // marker glyphs for router roles (gateways show fa-wifi instead)
+  const roleIcons = {
+    ROUTER: 'fa-exchange',
+    ROUTER_CLIENT: 'fa-exchange',
+    ROUTER_LATE: 'fa-history',
+  }
   let showHeatmap = false
   let heatLayer = null
   const updateHeatmap = () => {
@@ -378,11 +408,13 @@
     div.innerHTML = `
       <div class="legend-title" title="Legende ein-/ausklappen">Legende <span id="legend-caret" style="float:right">&#9662;</span></div>
       <div id="legend-body">
-      <div class="legend-section">Nodes</div>
-      <div class="legend-item">
-        <svg width="10" height="14" viewBox="0 0 10 14" flex-shrink="0"><path fill="#3d8bcd" d="M5 0C2.24 0 0 2.24 0 5c0 3.75 5 9 5 9s5-5.25 5-9C10 2.24 7.76 0 5 0zm0 6.5C4.17 6.5 3.5 5.83 3.5 5S4.17 3.5 5 3.5 6.5 4.17 6.5 5 5.83 6.5 5 6.5z"/></svg>
-        Node
-      </div>
+      <div class="legend-section">Rollen</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#dc2626"><i class="fa fa-exchange"></i></span>Router</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#f97316"><i class="fa fa-history"></i></span>Router Late</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#9333ea"></span>Repeater</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#16a34a"></span>Client Base</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#64748b"></span>Client Mute</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#2563eb"></span>Client / andere</div>
       <div class="legend-item">
         <span class="legend-gateway-badge"><i class="fa fa-wifi" style="font-size:7px"></i></span>
         MQTT Gateway
@@ -643,9 +675,17 @@
       `
       const searchString = `${longName} (${shortName}) ${id}`
       nodesBySearchString[searchString] = nodeNum
-      const icon = lastMapReport
-        ? L.divIcon({html: '<i class="fa fa-wifi"></i>', className: 'gateway-marker', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -13]})
-        : new L.Icon.Default()
+      const roleGlyph = roleIcons[role]
+      const markerSize = lastMapReport ? 26 : roleGlyph ? 18 : 16
+      const glyph = lastMapReport ? 'fa-wifi' : roleGlyph
+      const icon = L.divIcon({
+        html: `<div class="node-marker" style="background:${roleColor(role)};width:${markerSize}px;height:${markerSize}px;font-size:${lastMapReport ? 13 : 10}px">` +
+          (glyph ? `<i class="fa ${glyph}"></i>` : '') + '</div>',
+        className: '',
+        iconSize: [markerSize, markerSize],
+        iconAnchor: [markerSize / 2, markerSize / 2],
+        popupAnchor: [0, -markerSize / 2],
+      })
       markersByNode[nodeNum] = L.marker(position, {alt: 'Node', opacity, searchString, icon})
         .bindTooltip(tooltipContent, {opacity: 0.95})
         .bindPopup(() => {
