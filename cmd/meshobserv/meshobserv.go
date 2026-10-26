@@ -132,6 +132,7 @@ func handleMessage(from uint32, topic string, portNum generated.PortNum, payload
 			Nodes[from] = meshtastic.NewNode(topic)
 		}
 		Nodes[from].UpdateUser(longName, shortName, hwModel, role)
+		Nodes[from].UpdateSeenBy(topic)
 		NodesMutex.Unlock()
 	case generated.PortNum_TELEMETRY_APP:
 		var telemetry generated.Telemetry
@@ -150,6 +151,7 @@ func handleMessage(from uint32, topic string, portNum generated.PortNum, payload
 				Nodes[from] = meshtastic.NewNode(topic)
 			}
 			Nodes[from].UpdateDeviceMetrics(batteryLevel, voltage, chUtil, airUtilTx, uptime)
+			Nodes[from].UpdateSeenBy(topic)
 			NodesMutex.Unlock()
 		} else if envMetrics := telemetry.GetEnvironmentMetrics(); envMetrics != nil {
 			temperature := envMetrics.GetTemperature()
@@ -178,6 +180,7 @@ func handleMessage(from uint32, topic string, portNum generated.PortNum, payload
 				rainfall1,
 				rainfall24,
 			)
+			Nodes[from].UpdateSeenBy(topic)
 			NodesMutex.Unlock()
 		}
 	case generated.PortNum_NEIGHBORINFO_APP:
@@ -214,6 +217,7 @@ func handleMessage(from uint32, topic string, portNum generated.PortNum, payload
 				Source: meshtastic.NeighborSourceNeighborInfo,
 			})
 		}
+		Nodes[from].UpdateSeenBy(topic)
 		NodesMutex.Unlock()
 	case generated.PortNum_TRACEROUTE_APP:
 		var routeDiscovery generated.RouteDiscovery

@@ -96,6 +96,7 @@ The blocklist file (`configs/blocklist.txt`) contains one node ID (uint32, decim
 - **Protobuf generation**: The `internal/meshtastic/generated/` directory is gitignored and must be regenerated before building Go code. `build-meshobserv.sh` handles this automatically.
 - **Encryption**: Messages are decrypted using `meshtastic.DefaultKey` (the Meshtastic public default AES key) via `meshtastic.NewBlockCipher`.
 - **Position validation**: `meshtastic.ValidPosition` rejects positions with an exact 0 on either axis (GPS "no fix" artifact that drags nodes onto the zero lines) or outside ±90°/±180°; applied in the POSITION/MAP_REPORT handlers and in `Node.IsValid`.
+- **SeenBy semantics**: any self-broadcast (position, map report, node info, telemetry, neighbor info) refreshes `SeenBy`, so a node stays on the map at its last known position as long as it shows any sign of life; `lastPosition` records when the position itself was last updated and is shown in the popup. Note: invalid nodes (missing name or position) live only in memory — they are not persisted across restarts.
 - **SeenBy cap**: Each node tracks at most 10 most-recent MQTT topics that reported it.
 - **Neighbor cap**: Each node tracks at most 100 most-recent LoRa neighbors (with SNR).
 - **Watchdog**: If no MQTT messages are received during a prune interval, `meshobserv` calls `log.Fatal` and exits (triggering Docker restart).

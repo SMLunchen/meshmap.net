@@ -52,10 +52,11 @@ type Node struct {
 	OnlineLocalNodes uint32 `json:"onlineLocalNodes,omitempty"`
 	LastMapReport    int64  `json:"lastMapReport,omitempty"`
 	// Position
-	Latitude  int32  `json:"latitude"`
-	Longitude int32  `json:"longitude"`
-	Altitude  int32  `json:"altitude,omitempty"`
-	Precision uint32 `json:"precision,omitempty"`
+	Latitude     int32  `json:"latitude"`
+	Longitude    int32  `json:"longitude"`
+	Altitude     int32  `json:"altitude,omitempty"`
+	Precision    uint32 `json:"precision,omitempty"`
+	LastPosition int64  `json:"lastPosition,omitempty"`
 	// DeviceMetrics
 	BatteryLevel      uint32  `json:"batteryLevel,omitempty"`
 	Voltage           float32 `json:"voltage,omitempty"`
@@ -77,7 +78,8 @@ type Node struct {
 	LastEnvironmentMetrics int64   `json:"lastEnvironmentMetrics,omitempty"`
 	// NeighborInfo
 	Neighbors map[uint32]*NeighborInfo `json:"neighbors,omitempty"`
-	// key=mqtt topic, value=first seen/last position update
+	// key=mqtt topic, value=last self-broadcast from the node seen on that topic
+	// (position, map report, node info, telemetry, neighbor info)
 	SeenBy map[string]int64 `json:"seenBy"`
 }
 
@@ -247,6 +249,7 @@ func (node *Node) UpdatePosition(latitude, longitude, altitude int32, precision 
 	node.Longitude = longitude
 	node.Altitude = altitude
 	node.Precision = precision
+	node.LastPosition = time.Now().Unix()
 }
 
 func (node *Node) UpdateSeenBy(topic string) {

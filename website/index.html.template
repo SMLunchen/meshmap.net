@@ -548,7 +548,7 @@
       const {
         longName, shortName, hwModel, role,
         fwVersion, region, modemPreset, hasDefaultCh, onlineLocalNodes, lastMapReport,
-        latitude, longitude, altitude, precision,
+        latitude, longitude, altitude, precision, lastPosition,
         batteryLevel, voltage, chUtil, airUtilTx, uptime,
         temperature, relativeHumidity, barometricPressure, lux,
         windDirection, windSpeed, windGust, radiation, rainfall1, rainfall24,
@@ -616,6 +616,7 @@
         ${airUtilTx          ? `<tr><th>AirUtilTX</th><td>${airUtilTx.toFixed(2)}%</td></tr>`                        : ''}
         ${onlineLocalNodes   ? `<tr><th>Local nodes</th><td>${onlineLocalNodes}</td></tr>`                           : ''}
         <!--ANTENNA-->
+        ${lastPosition       ? `<tr><th>Last position</th><td>${since(lastPosition)}</td></tr>`                       : ''}
         ${precisionCorners   ? `<tr><th>Map precision</th><td>` +
                                `&#177;${Math.round(map.distance(...precisionCorners) / 2).toLocaleString()} m` +
                                ` (orange rectangle)</td></tr>`                                                       : ''}
