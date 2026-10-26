@@ -26,8 +26,8 @@ const (
 	NeighborExpiration = 28000 // ~7.8 hr
 	MetricsExpiration  = 28800 // 8 hr
 	PruneWriteInterval = time.Minute
-	RateLimitCount     = 300
-	RateLimitDuration  = time.Minute
+	RateLimitCount     = 1500
+	RateLimitDuration  = 5 * time.Minute
 )
 
 var (
@@ -104,7 +104,7 @@ func handleMessage(from uint32, topic string, portNum generated.PortNum, payload
 		longitude := position.GetLongitudeI()
 		altitude := position.GetAltitude()
 		precision := position.GetPrecisionBits()
-		if latitude == 0 && longitude == 0 {
+		if !meshtastic.ValidPosition(latitude, longitude) {
 			return
 		}
 		NodesMutex.Lock()
@@ -258,7 +258,7 @@ func handleMessage(from uint32, topic string, portNum generated.PortNum, payload
 		if len(longName) == 0 {
 			return
 		}
-		if latitude == 0 && longitude == 0 {
+		if !meshtastic.ValidPosition(latitude, longitude) {
 			return
 		}
 		NodesMutex.Lock()

@@ -61,7 +61,7 @@ There are no tests in this project.
 | `NodeExpiration` | 86400s (24hr) | Remove node position after 24hr without update |
 | `NeighborExpiration` | 28000s (~7.8hr) | Remove LoRa neighbor links after ~7.8hr |
 | `MetricsExpiration` | 28800s (8hr) | Remove telemetry after 8hr |
-| `RateLimitCount` | 300/min | Per-node message rate limit |
+| `RateLimitCount` | 1500 / 5 min | Per-node message rate limit |
 | `PruneWriteInterval` | 1 min | How often NodeDB is pruned and written to disk |
 
 ### Message Types Handled
@@ -95,6 +95,7 @@ The blocklist file (`configs/blocklist.txt`) contains one node ID (uint32, decim
 
 - **Protobuf generation**: The `internal/meshtastic/generated/` directory is gitignored and must be regenerated before building Go code. `build-meshobserv.sh` handles this automatically.
 - **Encryption**: Messages are decrypted using `meshtastic.DefaultKey` (the Meshtastic public default AES key) via `meshtastic.NewBlockCipher`.
+- **Position validation**: `meshtastic.ValidPosition` rejects positions with an exact 0 on either axis (GPS "no fix" artifact that drags nodes onto the zero lines) or outside ±90°/±180°; applied in the POSITION/MAP_REPORT handlers and in `Node.IsValid`.
 - **SeenBy cap**: Each node tracks at most 10 most-recent MQTT topics that reported it.
 - **Neighbor cap**: Each node tracks at most 100 most-recent LoRa neighbors (with SNR).
 - **Watchdog**: If no MQTT messages are received during a prune interval, `meshobserv` calls `log.Fatal` and exits (triggering Docker restart).

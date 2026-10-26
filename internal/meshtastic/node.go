@@ -81,6 +81,23 @@ type Node struct {
 	SeenBy map[string]int64 `json:"seenBy"`
 }
 
+// ValidPosition reports whether the given coordinates (in 1e-7 degrees) are a
+// plausible GPS fix. An exact integer 0 on either axis means "no fix": a real
+// position within 1e-7 degrees of the equator or prime meridian is practically
+// impossible, while partially empty positions drag nodes onto the zero lines.
+func ValidPosition(latitude, longitude int32) bool {
+	if latitude == 0 || longitude == 0 {
+		return false
+	}
+	if latitude < -900000000 || latitude > 900000000 {
+		return false
+	}
+	if longitude < -1800000000 || longitude > 1800000000 {
+		return false
+	}
+	return true
+}
+
 func NewNode(topic string) *Node {
 	return &Node{
 		SeenBy: map[string]int64{topic: time.Now().Unix()},
@@ -126,7 +143,7 @@ func (node *Node) IsValid() bool {
 	if len(node.LongName) == 0 {
 		return false
 	}
-	if node.Latitude == 0 && node.Longitude == 0 {
+	if !ValidPosition(node.Latitude, node.Longitude) {
 		return false
 	}
 	return true
