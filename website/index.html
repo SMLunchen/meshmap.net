@@ -109,30 +109,18 @@
       display: none;
     }
   }
-  .node-marker {
-    border: 2px solid #fff;
-    border-radius: 50%;
-    box-sizing: border-box;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.35);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-size: 13px;
+  .node-pin {
+    position: relative;
   }
-  .legend-dot {
-    width: 13px;
-    height: 13px;
-    border: 2px solid #fff;
-    border-radius: 50%;
-    box-sizing: border-box;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .node-pin svg {
+    display: block;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+  }
+  .node-pin .fa {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, -50%);
     color: #fff;
-    font-size: 6px;
   }
   .map-legend {
     background: white;
@@ -309,6 +297,7 @@
     ROUTER_CLIENT: 'fa-exchange',
     ROUTER_LATE: 'fa-history',
   }
+  const legendPin = color => `<svg viewBox="0 0 10 14" width="12" height="17" style="flex-shrink:0"><path fill="${color}" stroke="#fff" stroke-width="0.8" d="M5 .4C2.46.4.4 2.46.4 5c0 3.45 4.6 8.6 4.6 8.6S9.6 8.45 9.6 5C9.6 2.46 7.54.4 5 .4z"/></svg>`
   let showHeatmap = false
   let heatLayer = null
   const updateHeatmap = () => {
@@ -409,12 +398,12 @@
       <div class="legend-title" title="Legende ein-/ausklappen">Legende <span id="legend-caret" style="float:right">&#9662;</span></div>
       <div id="legend-body">
       <div class="legend-section">Rollen</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#dc2626"><i class="fa fa-exchange"></i></span>Router</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#f97316"><i class="fa fa-history"></i></span>Router Late</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#9333ea"></span>Repeater</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#16a34a"></span>Client Base</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#64748b"></span>Client Mute</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#2563eb"></span>Client / andere</div>
+      <div class="legend-item">${legendPin('#dc2626')}Router <i class="fa fa-exchange" style="font-size:9px;color:#888"></i></div>
+      <div class="legend-item">${legendPin('#f97316')}Router Late <i class="fa fa-history" style="font-size:9px;color:#888"></i></div>
+      <div class="legend-item">${legendPin('#9333ea')}Repeater</div>
+      <div class="legend-item">${legendPin('#16a34a')}Client Base</div>
+      <div class="legend-item">${legendPin('#64748b')}Client Mute</div>
+      <div class="legend-item">${legendPin('#2563eb')}Client / andere</div>
       <div class="legend-item">
         <span class="legend-gateway-badge"><i class="fa fa-wifi" style="font-size:7px"></i></span>
         MQTT Gateway
@@ -676,15 +665,22 @@
       const searchString = `${longName} (${shortName}) ${id}`
       nodesBySearchString[searchString] = nodeNum
       const roleGlyph = roleIcons[role]
-      const markerSize = lastMapReport ? 26 : roleGlyph ? 18 : 16
       const glyph = lastMapReport ? 'fa-wifi' : roleGlyph
+      const pinW = lastMapReport ? 28 : roleGlyph ? 24 : 20
+      const pinH = Math.round(pinW * 1.4)
       const icon = L.divIcon({
-        html: `<div class="node-marker" style="background:${roleColor(role)};width:${markerSize}px;height:${markerSize}px;font-size:${lastMapReport ? 13 : 10}px">` +
-          (glyph ? `<i class="fa ${glyph}"></i>` : '') + '</div>',
+        html: `<div class="node-pin" style="width:${pinW}px;height:${pinH}px">` +
+          `<svg viewBox="0 0 10 14" width="${pinW}" height="${pinH}">` +
+          `<path fill="${roleColor(role)}" stroke="#fff" stroke-width="0.8" d="M5 .4C2.46.4.4 2.46.4 5c0 3.45 4.6 8.6 4.6 8.6S9.6 8.45 9.6 5C9.6 2.46 7.54.4 5 .4z"/>` +
+          (glyph ? '' : '<circle cx="5" cy="5" r="1.6" fill="#fff"/>') +
+          '</svg>' +
+          (glyph ? `<i class="fa ${glyph}" style="top:${Math.round(pinH * 5 / 14)}px;font-size:${Math.round(pinW * 0.4)}px"></i>` : '') +
+          '</div>',
         className: '',
-        iconSize: [markerSize, markerSize],
-        iconAnchor: [markerSize / 2, markerSize / 2],
-        popupAnchor: [0, -markerSize / 2],
+        iconSize: [pinW, pinH],
+        iconAnchor: [pinW / 2, pinH],
+        popupAnchor: [0, -pinH],
+        tooltipAnchor: [0, -Math.round(pinH / 2)],
       })
       markersByNode[nodeNum] = L.marker(position, {alt: 'Node', opacity, searchString, icon})
         .bindTooltip(tooltipContent, {opacity: 0.95})
